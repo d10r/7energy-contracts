@@ -4,22 +4,23 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "hardhat compile"
   },
   "author": "",
   "license": "AGPL-3.0-or-later",
   "dependencies": {
-    "@openzeppelin/contracts": "^4.4.2",
-    "csv": "^6.0.5",
-    "csv-parse": "^5.0.4"
+    "@openzeppelin/contracts": "^4.6.0",
+    "csv": "^6.1.0",
+    "csv-parse": "^5.1.0"
   },
   "devDependencies": {
-    "@nomiclabs/hardhat-ethers": "^2.0.4",
+    "@nomiclabs/hardhat-ethers": "^2.0.6",
     "@nomiclabs/hardhat-etherscan": "^3.0.3",
-    "@nomiclabs/hardhat-waffle": "^2.0.1",
-    "chai": "^4.3.4",
-    "ethereum-waffle": "^3.4.0",
-    "ethers": "^5.5.3",
-    "hardhat": "^2.9.3"
+    "@nomiclabs/hardhat-waffle": "^2.0.3",
+    "chai": "^4.3.6",
+    "ethereum-waffle": "^3.4.4",
+    "ethers": "^5.6.8",
+    "hardhat": "^2.9.6"
   }
 }

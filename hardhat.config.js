@@ -28,7 +28,7 @@ module.exports = {
       accounts: ["0x542bef32d5d1c2dbe83316f83c2ae7c8e8298d9db11b0d2020c74dbf56518647"]
     }
   },
-  solidity: "0.8.9",
+  solidity: "0.8.13",
   etherscan: {
     apiKey: process.env.ETHERSCAN_API_KEY
   }

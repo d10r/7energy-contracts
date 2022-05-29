@@ -66,7 +66,7 @@ describe("SEDAO", function () {
     it("fail if insufficient payment", async function () {
       await paymentToken.connect(member1).approve(sedao.address, halfAdmissionAmount);
       await expect(sedao.connect(member1).join()).to.be.revertedWith("" +
-          "ERC20: transfer amount exceeds allowance"
+          "ERC20: insufficient allowance"
       );
       expect(!await sedao.isMember(member1.address));
       expect(await shareToken.balanceOf(member1.address)).to.be.equal(0);
