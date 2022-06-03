@@ -93,3 +93,7 @@ Eine beispielhafte Ausführung der Simulation auf dem Kovan-Netzwerk wurde mit d
 Die simulierte Dauer einer Abrechnungsperiode betrug dabei 10 Sekunden.
 
 Nach erfolgreicher Ausführung einer Simulation wird eine Datei `sim_report.json` angelegt, in der sich die Änderung der Kontostände (Abrechungs-Token und share-Token) der EG-Mitglieder nach jeder Abrechnungsperiode nachvollziehen lässt.
+
+## Lizenz
+
+AGPL-3.0-or-later
