@@ -96,4 +96,4 @@ Nach erfolgreicher Ausführung einer Simulation wird eine Datei `sim_report.json
 
 ## Lizenz
 
-AGPL-3.0-or-later
+CC-BY-SA 3.0 AT
