@@ -56,8 +56,11 @@ contract SEDAO {
     mapping(address => bool) public isOracle;
     // timeframe after which a leaving member can redeem all shares
     uint256 public cooldownPeriod = 3600*24; // 1 day
-    mapping(address => bool) public isMember;
     mapping(address => bool) public prefersShares;
+
+    enum memberStates {NONE, JOINING, MEMBER, LEAVING, EXITING}
+
+    mapping(address => memberStates) public memberStatus;
     // timestamp at which a member left - reset after cooldown
     mapping(address => uint256) public leftTs;
     uint256 constant SHARE_PRICE_DENOM = 1E18;
@@ -72,8 +75,27 @@ contract SEDAO {
         shareToken = new SEShareToken();
     }
 
+    modifier onlyNone {
+        require(memberStatus[msg.sender] == memberStates.NONE, "user is not in NONE state");
+        _;
+    }
+
+    modifier onlyJoining {
+        require(memberStatus[msg.sender] == memberStates.JOINING, "user is not in JOINING state");
+        _;
+    }
     modifier onlyMember {
-        require(isMember[msg.sender], "not a member");
+        require(memberStatus[msg.sender] == memberStates.MEMBER, "user is not in a MEMBER state");
+        _;
+    }
+
+    modifier onlyLeaving {
+        require(memberStatus[msg.sender] == memberStates.LEAVING, "user is not in a LEAVING state");
+        _;
+    }
+
+    modifier onlyExiting {
+        require(memberStatus[msg.sender] == memberStates.EXITING, "user is not in a EXITING state");
         _;
     }
 
@@ -99,7 +121,7 @@ contract SEDAO {
 
     // returns true if the given account is a member holding the min amount of shares required
     function isSolventMember(address account) public view returns (bool) {
-        return isMember[account] && shareToken.balanceOf(account) >= getMinShareAmount();
+        return memberStatus[msg.sender] == memberStates.MEMBER && shareToken.balanceOf(account) >= getMinShareAmount();
     }
 
     // in v1, the share price is just the relation between treasury and outstanding shares
@@ -112,18 +134,6 @@ contract SEDAO {
         }
     }
 
-    event Joined(address indexed account, uint256 admissionPaymentAmount, uint256 admissionSharesAmount);
-    // Allows anybody to pre-join the DAO by paying the admission fee and getting shares in return
-    // Sender needs to ERC20.approve() beforehand
-    // TODO: allow ERC777.send()
-    function join() external {
-        require(! isMember[msg.sender], "already a member");
-        paymentToken.transferFrom(msg.sender, address(this), admissionAmount);
-        shareToken.mint(msg.sender, getAdmissionShareAmount());
-        isMember[msg.sender] = true;
-        emit Joined(msg.sender, admissionAmount, getAdmissionShareAmount());
-    }
-
     event BoughtShares(address indexed account, uint256 sharesAmount, uint256 paymentAmount);
     // Allows members to buy more shares
     function buyShares(uint256 sharesAmount) external onlyMember {
@@ -132,32 +142,69 @@ contract SEDAO {
         emit BoughtShares(msg.sender, sharesAmount, sharesAmount * getSharePrice() / SHARE_PRICE_DENOM);
     }
 
-    event RedeemedShares(address indexed account, uint256 amount, uint256 paymentAmount);
+    event Joined(address indexed account, uint256 admissionPaymentAmount, uint256 admissionSharesAmount);
+    // Allows anybody to pre-join the DAO by paying the admission fee and getting shares in return
+    // Sender needs to ERC20.approve() beforehand
+    // TODO: allow ERC777.send()
+    function join() external {
+        require(memberStatus[msg.sender] == memberStates.NONE || memberStatus[msg.sender] == memberStates.EXITING, "user is not in NONE or EXITING state");
+        paymentToken.transferFrom(msg.sender, address(this), admissionAmount);
+        shareToken.mint(msg.sender, getAdmissionShareAmount());
+
+        memberStatus[msg.sender] = memberStates.JOINING;
+        emit Joined(msg.sender, admissionAmount, getAdmissionShareAmount());
+    }
+
+    event Full(address indexed account, uint256 admissionAmount, uint256 admissionSharesAmount);
+    // handle full member status
+    function full() external onlyJoining {
+        memberStatus[msg.sender] = memberStates.MEMBER;
+        emit Full(msg.sender, admissionAmount, getAdmissionShareAmount());
+    }
+
+    event Leave(address indexed account, uint256 sharesHeld);
+    // allows members to leave. Shares can be redeemed after the cooldown period
+    function leave() external onlyMember {
+        leftTs[msg.sender] = block.timestamp;
+        memberStatus[msg.sender] = memberStates.LEAVING;
+        emit Leave(msg.sender, shareToken.balanceOf(msg.sender));
+    }
+
+    event Exited(address indexed account, uint256 sharesHeld);
+    // handle left member status
+    function exited() external {
+        memberStatus[msg.sender] = memberStates.EXITING;
+        emit Exited(msg.sender, shareToken.balanceOf(msg.sender));
+    }
+
+        event RedeemedShares(address indexed account, uint256 amount, uint256 paymentAmount);
     // Allows anybody to redeem shares for payment tokens
     // at least shares equivalent to the admission amount need to be left
     function redeemShares(uint256 sharesAmount) external {
         require(sharesAmount <= shareToken.balanceOf(msg.sender), "amount exceeds balance");
         if(shareToken.balanceOf(msg.sender) - sharesAmount < getMinShareAmount()) {
-            if(isMember[msg.sender]) {
+            if(memberStatus[msg.sender] == memberStates.MEMBER) {
                 revert("not enough shares left");
             } else if(leftTs[msg.sender] != 0) { // leaving member
                 require(block.timestamp >= leftTs[msg.sender] + cooldownPeriod, "cooldown not over");
                 leftTs[msg.sender] = 0; // cooldown over, reset
+                memberStatus[msg.sender] = memberStates.EXITING;
             }
         }
-        
         uint256 paymentAmount = sharesAmount * getSharePrice() / SHARE_PRICE_DENOM;
         paymentToken.transfer(msg.sender, paymentAmount);
         shareToken.burn(msg.sender, sharesAmount);
         emit RedeemedShares(msg.sender, sharesAmount, paymentAmount);
     }
 
-    event Left(address indexed account, uint256 sharesHeld);
-    // allows members to leave. Shares can be redeemed after the cooldown period
-    function leave() external onlyMember {
-        leftTs[msg.sender] = block.timestamp;
-        isMember[msg.sender] = false;
-        emit Left(msg.sender, shareToken.balanceOf(msg.sender));
+    function RedeemAfterLeave() external onlyLeaving {
+        uint256 sharesAmount = shareToken.balanceOf(msg.sender);
+        uint256 paymentAmount = sharesAmount * getSharePrice() / SHARE_PRICE_DENOM;
+        paymentToken.transfer(msg.sender, paymentAmount);
+        shareToken.burn(msg.sender, sharesAmount);
+        memberStatus[msg.sender] = memberStates.EXITING;
+        emit RedeemedShares(msg.sender, sharesAmount, paymentAmount);
+        emit Exited(msg.sender,sharesAmount);
     }
     
     // not yet tested - don't use!
@@ -175,6 +222,39 @@ contract SEDAO {
         prefersShares[msg.sender] = true;
         emit PrefersShares(msg.sender);
     }
+
+    
+    event RemovedMember(address indexed account, uint256 sharesHeld);
+    // allows the admin to remove a member. Cooldown period not applied in this case.
+    function removeMember(address account) external onlyAdmin {
+        if(memberStatus[account] == memberStates.MEMBER || memberStatus[account] == memberStates.JOINING) {
+            memberStatus[account] = memberStates.LEAVING;
+            leftTs[account] = block.timestamp;
+            emit RemovedMember(account, shareToken.balanceOf(account));
+            emit Leave(account, shareToken.balanceOf(account));
+        }
+    }
+
+    event AddedOracle(address indexed account);
+    function addOracle(address account) external onlyAdmin {
+        require(! isOracle[account], "already set");
+        isOracle[account] = true;
+        emit AddedOracle(account);
+    }
+
+    event RemovedOracle(address indexed account);
+    function removeOracle(address account) external onlyAdmin {
+        require(isOracle[account], "not set");
+        isOracle[account] = false;
+        emit RemovedOracle(account);
+    }
+
+
+
+
+
+
+
 
     event Consumed(address indexed account, uint256 period, uint256 wh, uint256 price);
     event Produced(address indexed account, uint256 period, uint256 wh, uint256 price);
@@ -211,26 +291,5 @@ contract SEDAO {
         }
     }
 
-    event RemovedMember(address indexed account, uint256 sharesHeld);
-    // allows the admin to remove a member. Cooldown period not applied in this case.
-    function removeMember(address account) external onlyAdmin {
-        if(isMember[account]) {
-            isMember[account] = false;
-            emit RemovedMember(account, shareToken.balanceOf(account));
-        }
-    }
-
-    event AddedOracle(address indexed account);
-    function addOracle(address account) external onlyAdmin {
-        require(! isOracle[account], "already set");
-        isOracle[account] = true;
-        emit AddedOracle(account);
-    }
-
-    event RemovedOracle(address indexed account);
-    function removeOracle(address account) external onlyAdmin {
-        require(isOracle[account], "not set");
-        isOracle[account] = false;
-        emit RemovedOracle(account);
-    }
 }
+
