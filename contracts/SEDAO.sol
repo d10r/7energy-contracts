@@ -121,7 +121,7 @@ contract SEDAO {
 
     // returns true if the given account is a member holding the min amount of shares required
     function isSolventMember(address account) public view returns (bool) {
-        return memberStatus[msg.sender] == memberStates.MEMBER && shareToken.balanceOf(account) >= getMinShareAmount();
+        return memberStatus[account] == memberStates.MEMBER && shareToken.balanceOf(account) >= getMinShareAmount();
     }
 
     // in v1, the share price is just the relation between treasury and outstanding shares
