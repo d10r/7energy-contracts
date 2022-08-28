@@ -47,30 +47,36 @@ contract SEShareToken is ERC20 {
     }
 }
 
+import { UUPSProxiable } from "./upgradability/UUPSProxiable.sol";
+
 // Simple implementation of a contract facilitating accounting of energy communities.
-contract SEDAO {
+contract SEDAO is UUPSProxiable {
+
+    // constant and immutable variables - this don't occupy a state slot
+
+    uint256 constant SHARE_PRICE_DENOM = 1E18;
+    // timeframe after which a leaving member can redeem all shares
+    uint256 public constant cooldownPeriod = 3600*24; // 1 day
+
+    /*
+     * STATE VARIABLES
+     * DO NOT CHANGE ORDER OR TYPE IN ORDER NOT TO BREAK UPDATES
+     * ONLY ADDING ADDITIONAL STATE VARIABLES AT THE END IS ALLOWED
+     */
     IERC20 public paymentToken;
     SEShareToken public shareToken;
     uint256 public admissionAmount;
     address public admin;
     mapping(address => bool) public isOracle;
-    // timeframe after which a leaving member can redeem all shares
-    uint256 public cooldownPeriod = 3600*24; // 1 day
     mapping(address => bool) public isMember;
     mapping(address => bool) public prefersShares;
     // timestamp at which a member left - reset after cooldown
     mapping(address => uint256) public leftTs;
-    uint256 constant SHARE_PRICE_DENOM = 1E18;
 
-    constructor(
-        IERC20 paymentToken_, 
-        uint256 initialAdmissionAmount_
-    ) {
-        admin = msg.sender;
-        paymentToken = paymentToken_;
-        admissionAmount = initialAdmissionAmount_;
-        shareToken = new SEShareToken();
-    }
+    /*
+     * END OF STATE VARIABLES
+     * DO NOT CHANGE ORDER OR TYPE IN ORDER NOT TO BREAK UPDATES
+     */
 
     modifier onlyMember {
         require(isMember[msg.sender], "not a member");
@@ -232,5 +238,33 @@ contract SEDAO {
         require(isOracle[account], "not set");
         isOracle[account] = false;
         emit RemovedOracle(account);
+    }
+
+    /**************************************************************************
+    * UUPSProxiable
+    **************************************************************************/
+    function initialize(
+        IERC20 paymentToken_,
+        uint256 initialAdmissionAmount_
+    )
+        external
+        initializer // OpenZeppelin Initializable
+    {
+        admin = msg.sender;
+        paymentToken = paymentToken_;
+        admissionAmount = initialAdmissionAmount_;
+        if(address(paymentToken) != address(0)) {
+            // if zero, we assume it's just about marking the logic contract as initialized
+            shareToken = new SEShareToken();
+        }
+    }
+
+    function proxiableUUID() public pure override returns (bytes32) {
+        return keccak256("at.7energy.contracts.sedao");
+    }
+
+    function updateCode(address newAddress) external override {
+        require(msg.sender == admin, "only admin can update code");
+        _updateCodeAddress(newAddress);
     }
 }

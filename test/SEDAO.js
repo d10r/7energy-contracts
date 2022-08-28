@@ -11,7 +11,7 @@ describe("SEDAO", function () {
   let admin, member1, member2, member3, member4, oracle1, oracle2, eve;
   let allMembers;
   let SEDAO, ERC20;
-  let sedao, shareToken, paymentToken;
+  let proxy, sedao, shareToken, paymentToken;
 
   const admissionAmount = ethers.utils.parseUnits("100");
   const halfAdmissionAmount = ethers.utils.parseUnits("50");
@@ -25,6 +25,7 @@ describe("SEDAO", function () {
     SEDAO = await ethers.getContractFactory("SEDAO");
     PaymentToken = await ethers.getContractFactory("PaymentTokenMock");
     SEShareToken = await ethers.getContractFactory("SEShareToken");
+    UUPSProxy = await ethers.getContractFactory("UUPSProxy");
   });
 
   beforeEach(async function () {
@@ -34,8 +35,15 @@ describe("SEDAO", function () {
         await paymentToken.transfer(m.address, admissionAmount.mul(10))
     }
     
+    proxy = await UUPSProxy.deploy();
     //console.log(`paymentToken: ${paymentToken.address}`);
-    sedao = await SEDAO.deploy(paymentToken.address, admissionAmount);
+    const sedaoLogic = await SEDAO.deploy();
+    // block initialization of logic contract
+    sedaoLogic.initialize(0, 0);
+    await proxy.initializeProxy(sedaoLogic.address);
+    sedao = await SEDAO.attach(proxy.address);
+    await sedao.initialize(paymentToken.address, admissionAmount);
+
     shareToken = SEShareToken.attach(await sedao.shareToken());
   });
 

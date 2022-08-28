@@ -17,11 +17,22 @@ async function main() {
     const paymentToken = process.env.PAYMENT_TOKEN || "0xb64845d53a373d35160b72492818f0d2f51292c0";
     const admissionAmount = ethers.utils.parseUnits(process.env.ADMISSION_AMOUNT || "100");
     
+    const UUPSProxy = await hre.ethers.getContractFactory("UUPSProxy");
     const SEDAO = await hre.ethers.getContractFactory("SEDAO");
-    const sedao = await SEDAO.deploy(paymentToken, admissionAmount);
-    await sedao.deployed();
 
-    console.log("SEDAO deployed to:", sedao.address);
+    const proxy = await UUPSProxy.deploy();
+    await proxy.deployed();
+    console.log("SEDAO proxy deployed to:", proxy.address);
+
+    const sedaoLogic = await SEDAO.deploy();
+    await sedaoLogic.deployed();
+    console.log("SEDAO logic deployed to:", sedaoLogic.address);
+
+    await (await proxy.initializeProxy(sedaoLogic.address)).wait();
+
+    const sedao = await SEDAO.attach(proxy.address);
+    await (await sedao.initialize(paymentToken, admissionAmount)).wait();
+    console.log("SEDAO initialized!");
 }
 
 main()
